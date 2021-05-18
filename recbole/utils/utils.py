@@ -193,6 +193,8 @@ def init_seed(seed, reproducibility):
 
 
 def set_color(log, color, highlight=True):
+    return log
+    '''
     color_set = ['black', 'red', 'green', 'yellow', 'blue', 'pink', 'cyan', 'white']
     try:
         index = color_set.index(color)
@@ -205,3 +207,4 @@ def set_color(log, color, highlight=True):
         prev_log += '0;3'
     prev_log += str(index) + 'm'
     return prev_log + log + '\033[0m'
+    '''

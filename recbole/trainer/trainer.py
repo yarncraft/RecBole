@@ -20,18 +20,22 @@ recbole.trainer.trainer
 import os
 from logging import getLogger
 from time import time
+from prettytable import PrettyTable
 
 import numpy as np
 import torch
 import torch.optim as optim
 from torch.nn.utils.clip_grad import clip_grad_norm_
-from tqdm import tqdm
+from tqdm.autonotebook import tqdm
+import lightgbm as lgb
+
 
 from recbole.data.interaction import Interaction
 from recbole.evaluator import ProxyEvaluator
 from recbole.utils import ensure_dir, get_local_time, early_stopping, calculate_valid_score, dict2str, \
     DataLoaderType, KGDataLoaderState
 from recbole.utils.utils import set_color
+from matplotlib import pyplot as plt
 
 
 class AbstractTrainer(object):
@@ -153,10 +157,15 @@ class Trainer(AbstractTrainer):
                 desc=set_color(f"Train {epoch_idx:>5}", 'pink'),
             ) if show_progress else enumerate(train_data)
         )
+        #batch_group = []
         for batch_idx, interaction in iter_data:
             interaction = interaction.to(self.device)
             self.optimizer.zero_grad()
             losses = loss_func(interaction)
+            batch_group.append(losses.item())
+            #if batch_idx % 100 == 0: 
+            #    print(batch_idx, sum(batch_group)/len(batch_group))
+
             if isinstance(losses, tuple):
                 loss = sum(losses)
                 loss_tuple = tuple(per_loss.item() for per_loss in losses)
@@ -272,16 +281,16 @@ class Trainer(AbstractTrainer):
             training_end_time = time()
             train_loss_output = \
                 self._generate_train_loss_output(epoch_idx, training_start_time, training_end_time, train_loss)
-            if verbose:
-                self.logger.info(train_loss_output)
+            #if verbose:
+            #    self.logger.info(train_loss_output)
 
             # eval
             if self.eval_step <= 0 or not valid_data:
                 if saved:
                     self._save_checkpoint(epoch_idx)
                     update_output = set_color('Saving current', 'blue') + ': %s' % self.saved_model_file
-                    if verbose:
-                        self.logger.info(update_output)
+                    #if verbose:
+                    #    self.logger.info(update_output)
                 continue
             if (epoch_idx + 1) % self.eval_step == 0:
                 valid_start_time = time()
@@ -299,14 +308,20 @@ class Trainer(AbstractTrainer):
                                      (epoch_idx, valid_end_time - valid_start_time, valid_score)
                 valid_result_output = set_color('valid result', 'blue') + ': \n' + dict2str(valid_result)
                 if verbose:
-                    self.logger.info(valid_score_output)
-                    self.logger.info(valid_result_output)
+                    self.logger.info(valid_score_output) 
+                    names = [k for k,_ in valid_result.items()]
+                    values = [round(v,3) for _,v in valid_result.items()]
+                    my_table = PrettyTable()
+                    my_table.field_names = names
+                    my_table.add_row(values)
+                    print(my_table)
+
                 if update_flag:
                     if saved:
                         self._save_checkpoint(epoch_idx)
                         update_output = set_color('Saving current best', 'blue') + ': %s' % self.saved_model_file
-                        if verbose:
-                            self.logger.info(update_output)
+                        #if verbose:
+                        #    self.logger.info(update_output)
                     self.best_valid_result = valid_result
 
                 if callback_fn:
@@ -425,7 +440,7 @@ class Trainer(AbstractTrainer):
             result_list.append(result)
         return torch.cat(result_list, dim=0)
 
-    def plot_train_loss(self, show=True, save_path=None):
+    def plot_train_loss(self, show=True, save_path="None"):
         r"""Plot the train loss in each epoch
 
         Args:
@@ -927,6 +942,10 @@ class lightgbmTrainer(DecisionTreeTrainer):
         self.deval_data, self.deval_label = self._interaction_to_sparse(eval_data)
         self.eval_true = torch.Tensor(self.deval_label)
         self.eval_pred = torch.Tensor(self.model.predict(self.deval_data))
+
+        fig,ax = plt.subplots(figsize=(15,15))
+        lgb.plot_importance(self.model, ax=ax,importance_type='gain',max_num_features=15)
+        plt.show()
 
         batch_matrix_list = [[torch.stack((self.eval_true, self.eval_pred), 1)]]
         result = self.evaluator.evaluate(batch_matrix_list, eval_data)
