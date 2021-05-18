@@ -162,7 +162,7 @@ class Trainer(AbstractTrainer):
             interaction = interaction.to(self.device)
             self.optimizer.zero_grad()
             losses = loss_func(interaction)
-            batch_group.append(losses.item())
+            #batch_group.append(losses.item())
             #if batch_idx % 100 == 0: 
             #    print(batch_idx, sum(batch_group)/len(batch_group))
 
